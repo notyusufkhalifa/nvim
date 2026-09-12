@@ -2,33 +2,20 @@ vim.opt.termguicolors = true
 
 -- installed early so it's available before colorscheme() runs below
 -- (the rest of the plugin list is installed further down, near PLUGINS)
-vim.pack.add({ "https://github.com/savq/melange-nvim" })
+vim.pack.add({
+	{
+		src = "https://github.com/rose-pine/nvim",
+		name = "rose-pine",
+	},
+	{
+		src = "https://github.com/catppuccin/nvim",
+		name = "catppuccin-nvim",
+	},
+})
 
 vim.opt.background = "dark" -- set to "light" for the light variant
-vim.cmd.colorscheme("melange")
-
-local function set_transparent() -- set UI component to transparent
-	local groups = {
-		"Normal",
-		"NormalNC",
-		"EndOfBuffer",
-		"NormalFloat",
-		"FloatBorder",
-		"SignColumn",
-		"StatusLine",
-		"StatusLineNC",
-		"TabLine",
-		"TabLineFill",
-		"TabLineSel",
-		"ColorColumn",
-	}
-	for _, g in ipairs(groups) do
-		vim.api.nvim_set_hl(0, g, { bg = "none" })
-	end
-	vim.api.nvim_set_hl(0, "TabLineFill", { bg = "none", fg = "#767676" })
-end
-
-set_transparent()
+require("rose-pine").setup()
+vim.cmd.colorscheme("rose-pine")
 
 -- ============================================================================
 -- OPTIONS
@@ -469,11 +456,9 @@ require("mini.bufremove").setup({})
 require("mini.notify").setup({})
 require("mini.icons").setup({})
 
--- statusline: theme "auto" pulls colors straight from melange's highlight
--- groups (no dedicated melange lualine theme exists, so this generates one)
 require("lualine").setup({
 	options = {
-		theme = "melange", -- melange-nvim ships a dedicated lualine theme
+		theme = "rose-pine", -- rose-pine ships a dedicated lualine theme
 		icons_enabled = true,
 		component_separators = { left = "", right = "" },
 		section_separators = { left = "", right = "" },
@@ -739,7 +724,7 @@ vim.lsp.config("lua_ls", {
 		},
 	},
 })
-vim.lsp.config("pyright", {})
+vim.lsp.config("pyrefly", {})
 vim.lsp.config("ts_ls", {})
 vim.lsp.config("gopls", {})
 vim.lsp.config("clangd", {})
@@ -815,101 +800,11 @@ end
 
 vim.lsp.enable({
 	"lua_ls",
-	"pyright",
+	"pyrefly",
 	"ts_ls",
 	"gopls",
 	"clangd",
 	"omnisharp",
 	"efm",
 })
-
--- Setup Powershell
-require("powershell").setup({
-	bundle_path = vim.fn.stdpath("data") .. "/mason/packages/powershell-editor-services",
-})
-
--- ============================================================================
--- FLOATING TERMINAL
--- ============================================================================
-vim.api.nvim_create_autocmd("TermClose", {
-	group = augroup,
-	callback = function()
-		if vim.v.event.status == 0 then
-			vim.api.nvim_buf_delete(0, {})
-		end
-	end,
-})
-
-vim.api.nvim_create_autocmd("TermOpen", {
-	group = augroup,
-	callback = function()
-		vim.opt_local.number = false
-		vim.opt_local.relativenumber = false
-		vim.opt_local.signcolumn = "no"
-	end,
-})
-
-local terminal_state = { buf = nil, win = nil, is_open = false }
-
-local function FloatingTerminal()
-	if terminal_state.is_open and terminal_state.win and vim.api.nvim_win_is_valid(terminal_state.win) then
-		vim.api.nvim_win_close(terminal_state.win, false)
-		terminal_state.is_open = false
-		return
-	end
-
-	if not terminal_state.buf or not vim.api.nvim_buf_is_valid(terminal_state.buf) then
-		terminal_state.buf = vim.api.nvim_create_buf(false, true)
-		vim.bo[terminal_state.buf].bufhidden = "hide"
-	end
-
-	local width = math.floor(vim.o.columns * 0.8)
-	local height = math.floor(vim.o.lines * 0.8)
-	local row = math.floor((vim.o.lines - height) / 2)
-	local col = math.floor((vim.o.columns - width) / 2)
-
-	terminal_state.win = vim.api.nvim_open_win(terminal_state.buf, true, {
-		relative = "editor",
-		width = width,
-		height = height,
-		row = row,
-		col = col,
-		style = "minimal",
-		border = "rounded",
-	})
-
-	vim.wo[terminal_state.win].winblend = 0
-	vim.wo[terminal_state.win].winhighlight = "Normal:FloatingTermNormal,FloatBorder:FloatingTermBorder"
-	vim.api.nvim_set_hl(0, "FloatingTermNormal", { bg = "none" })
-	vim.api.nvim_set_hl(0, "FloatingTermBorder", { bg = "none" })
-
-	local has_terminal = vim.bo[terminal_state.buf].buftype == "terminal"
-	if not has_terminal then
-		vim.fn.termopen(os.getenv("SHELL"))
-	end
-
-	terminal_state.is_open = true
-	vim.cmd("startinsert")
-
-	local term_augroup = vim.api.nvim_create_augroup("FloatingTermLeave_" .. terminal_state.win, { clear = true })
-	vim.api.nvim_create_autocmd("BufLeave", {
-		group = term_augroup,
-		buffer = terminal_state.buf,
-		callback = function()
-			if terminal_state.is_open and terminal_state.win and vim.api.nvim_win_is_valid(terminal_state.win) then
-				vim.api.nvim_win_close(terminal_state.win, false)
-				terminal_state.is_open = false
-			end
-		end,
-		once = true,
-	})
-end
-
-vim.keymap.set("n", "<leader>t", FloatingTerminal, { noremap = true, silent = true, desc = "Toggle floating terminal" })
-vim.keymap.set("t", "<Esc>", "<C-\\><C-n>", { noremap = true, silent = true, desc = "Terminal normal mode" })
-vim.keymap.set("t", "<C-q>", function()
-	if terminal_state.is_open and terminal_state.win and vim.api.nvim_win_is_valid(terminal_state.win) then
-		vim.api.nvim_win_close(terminal_state.win, false)
-		terminal_state.is_open = false
-	end
-end, { noremap = true, silent = true, desc = "Close floating terminal" })
+vim.treesitter.language.register("ini", "conf")
